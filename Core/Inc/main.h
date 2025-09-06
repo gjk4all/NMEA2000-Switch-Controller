@@ -32,6 +32,7 @@ extern "C" {
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include <stdlib.h>
+#include <string.h>
 /* USER CODE END Includes */
 
 /* Exported types ------------------------------------------------------------*/
@@ -57,8 +58,8 @@ void Error_Handler(void);
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/
-#define SW8_ON_Pin GPIO_PIN_13
-#define SW8_ON_GPIO_Port GPIOC
+#define SW8_OFF_Pin GPIO_PIN_13
+#define SW8_OFF_GPIO_Port GPIOC
 #define LED0_Pin GPIO_PIN_0
 #define LED0_GPIO_Port GPIOA
 #define LED1_Pin GPIO_PIN_1
@@ -75,14 +76,14 @@ void Error_Handler(void);
 #define LED6_GPIO_Port GPIOA
 #define LED7_Pin GPIO_PIN_7
 #define LED7_GPIO_Port GPIOA
-#define SW1_OFF_Pin GPIO_PIN_0
-#define SW1_OFF_GPIO_Port GPIOB
-#define SW1_ON_Pin GPIO_PIN_1
+#define SW1_ON_Pin GPIO_PIN_0
 #define SW1_ON_GPIO_Port GPIOB
-#define SW4_ON_Pin GPIO_PIN_10
-#define SW4_ON_GPIO_Port GPIOB
-#define SW5_OFF_Pin GPIO_PIN_11
-#define SW5_OFF_GPIO_Port GPIOB
+#define SW1_OFF_Pin GPIO_PIN_1
+#define SW1_OFF_GPIO_Port GPIOB
+#define SW4_OFF_Pin GPIO_PIN_10
+#define SW4_OFF_GPIO_Port GPIOB
+#define SW5_ON_Pin GPIO_PIN_11
+#define SW5_ON_GPIO_Port GPIOB
 #define ID0_Pin GPIO_PIN_12
 #define ID0_GPIO_Port GPIOB
 #define ID1_Pin GPIO_PIN_13
@@ -91,28 +92,28 @@ void Error_Handler(void);
 #define ID2_GPIO_Port GPIOB
 #define ID3_Pin GPIO_PIN_15
 #define ID3_GPIO_Port GPIOB
-#define SW5_ON_Pin GPIO_PIN_8
-#define SW5_ON_GPIO_Port GPIOA
-#define SW6_OFF_Pin GPIO_PIN_9
-#define SW6_OFF_GPIO_Port GPIOA
-#define SW6_ON_Pin GPIO_PIN_10
+#define SW5_OFF_Pin GPIO_PIN_8
+#define SW5_OFF_GPIO_Port GPIOA
+#define SW6_ON_Pin GPIO_PIN_9
 #define SW6_ON_GPIO_Port GPIOA
-#define SW7_OFF_Pin GPIO_PIN_11
-#define SW7_OFF_GPIO_Port GPIOA
-#define SW7_ON_Pin GPIO_PIN_12
+#define SW6_OFF_Pin GPIO_PIN_10
+#define SW6_OFF_GPIO_Port GPIOA
+#define SW7_ON_Pin GPIO_PIN_11
 #define SW7_ON_GPIO_Port GPIOA
-#define SW8_OFF_Pin GPIO_PIN_15
-#define SW8_OFF_GPIO_Port GPIOA
-#define SW2_OFF_Pin GPIO_PIN_3
-#define SW2_OFF_GPIO_Port GPIOB
-#define SW2_ON_Pin GPIO_PIN_4
+#define SW7_OFF_Pin GPIO_PIN_12
+#define SW7_OFF_GPIO_Port GPIOA
+#define SW8_ON_Pin GPIO_PIN_15
+#define SW8_ON_GPIO_Port GPIOA
+#define SW2_ON_Pin GPIO_PIN_3
 #define SW2_ON_GPIO_Port GPIOB
-#define SW3_OFF_Pin GPIO_PIN_5
-#define SW3_OFF_GPIO_Port GPIOB
-#define SW3_ON_Pin GPIO_PIN_6
+#define SW2_OFF_Pin GPIO_PIN_4
+#define SW2_OFF_GPIO_Port GPIOB
+#define SW3_ON_Pin GPIO_PIN_5
 #define SW3_ON_GPIO_Port GPIOB
-#define SW4_OFF_Pin GPIO_PIN_7
-#define SW4_OFF_GPIO_Port GPIOB
+#define SW3_OFF_Pin GPIO_PIN_6
+#define SW3_OFF_GPIO_Port GPIOB
+#define SW4_ON_Pin GPIO_PIN_7
+#define SW4_ON_GPIO_Port GPIOB
 
 /* USER CODE BEGIN Private defines */
 

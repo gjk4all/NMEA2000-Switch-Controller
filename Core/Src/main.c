@@ -47,24 +47,37 @@ struct LED_T {
 
 // NMEA2K network operational NAME parameters
 struct NMEA2K_NETWORK {
-	uint8_t		senderId;
-	uint32_t	identityNumber;
-	uint16_t	manufacturerCode;
-	uint8_t		deviceInstance;
-	uint8_t		deviceFunction;
-	uint8_t		deviceClass;
-	uint8_t		systemInstance;
-	uint8_t		industryGroup;
-	uint8_t		linkState;
-	uint8_t		linkRetries;
+	uint8_t			senderId;
+	uint32_t		identityNumber;
+	uint16_t		manufacturerCode;
+	uint8_t			deviceInstance;
+	uint8_t			deviceFunction;
+	uint8_t			deviceClass;
+	uint8_t			systemInstance;
+	uint8_t			industryGroup;
+	uint8_t			arbetraryAddress;
+	uint8_t			linkState;
+	uint8_t			linkRetries;
+};
+
+struct ISO_TRANSPORT_MESSAGE {
+	uint8_t			senderId;
+	uint8_t			isoCommand;
+	uint8_t			packetsExpected;
+	uint8_t			packetsReceived;
+	uint16_t		messageSize;
+	uint32_t		pgn;
+	uint8_t			*data;
+	struct ISO_TRANSPORT_MESSAGE *prev;
+	struct ISO_TRANSPORT_MESSAGE *next;
 };
 
 struct TIMER_T {
-	int switchId;
-	int countdown;
-	void (*callback)(int);
-	struct TIMER_T *prev;
-	struct TIMER_T *next;
+	int 			switchId;
+	int 			countdown;
+	void 			(*callback)(int);
+	struct 			TIMER_T *prev;
+	struct 			TIMER_T *next;
 };
 
 /* USER CODE END PTD */
@@ -115,14 +128,14 @@ struct TIMER_T {
 /* USER CODE BEGIN PM */
 
 // Compare macro
-#define compare(a, b) (((a) < (b)) ? -1 : (((a) > (b)) ? 1 : 0))
+#define compare(a, b) 		(((a) < (b)) ? -1 : (((a) > (b)) ? 1 : 0))
 
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
 CAN_HandleTypeDef hcan;
 
-TIM_HandleTypeDef htim1;
+TIM_HandleTypeDef htim3;
 
 /* USER CODE BEGIN PV */
 volatile uint16_t ledStatus;
@@ -136,13 +149,13 @@ struct SWITCH_T switches[RELAY_CHANNELS] = {
 		{SWITCH_PUSHBUTTON, SWITCH_IDLE, SW4_ON_Pin, SW4_ON_GPIO_Port, SW4_OFF_Pin, SW4_OFF_GPIO_Port, 0, 0},
 		{SWITCH_MOMENTARY, SWITCH_IDLE, SW5_ON_Pin, SW5_ON_GPIO_Port, SW5_OFF_Pin, SW5_OFF_GPIO_Port, 0, 0},
 		{SWITCH_MOMENTARY, SWITCH_IDLE, SW6_ON_Pin, SW6_ON_GPIO_Port, SW6_OFF_Pin, SW6_OFF_GPIO_Port, 0, 0},
-		{SWITCH_MOM_TIME, SWITCH_IDLE, SW7_ON_Pin, SW7_ON_GPIO_Port, SW7_OFF_Pin, SW7_OFF_GPIO_Port, 30, 0},
-		{SWITCH_MOM_TIME, SWITCH_IDLE, SW8_ON_Pin, SW8_ON_GPIO_Port, SW8_OFF_Pin, SW8_OFF_GPIO_Port, 50, 0}
+		{SWITCH_MOM_TIME, SWITCH_IDLE, SW7_ON_Pin, SW7_ON_GPIO_Port, SW7_OFF_Pin, SW7_OFF_GPIO_Port, 300, 0},
+		{SWITCH_MOM_TIME, SWITCH_IDLE, SW8_ON_Pin, SW8_ON_GPIO_Port, SW8_OFF_Pin, SW8_OFF_GPIO_Port, 500, 0}
 };
 
 // Configuration of leds
 struct LED_T leds[RELAY_CHANNELS] = {
-		{LED0_GPIO_Port, LED0_Pin},
+		{LED0_GPIO_Port,  },
 		{LED1_GPIO_Port, LED1_Pin},
 		{LED2_GPIO_Port, LED2_Pin},
 		{LED3_GPIO_Port, LED3_Pin},
@@ -161,10 +174,12 @@ struct TIMER_T *timers = NULL;
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_CAN_Init(void);
-static void MX_TIM1_Init(void);
+static void MX_TIM3_Init(void);
 /* USER CODE BEGIN PFP */
 void Send_ISOAddressClaim();
 void Send_SwitchBankControl(uint8_t *data);
+void Handle_ISOTransportMessages(uint32_t N2KPgn, uint8_t senderId, uint8_t *data);
+void Handle_ISOCommandedAddress(uint8_t *data);
 void Set_Leds(uint8_t *data);
 int Compare_NameWeight(uint8_t *data);
 int Get_RelayBoardId(void);
@@ -200,6 +215,7 @@ int main(void)
 	nmea2kNetwork.deviceClass = DEV_CLASS;
 	nmea2kNetwork.systemInstance = SYS_INST;
 	nmea2kNetwork.industryGroup = IND_GROUP;
+	nmea2kNetwork.arbetraryAddress = ARB_ADDRESS;
 	nmea2kNetwork.linkState = LINK_STATE_IDLE;
 	nmea2kNetwork.linkRetries = 0;
   /* USER CODE END 1 */
@@ -223,79 +239,83 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_CAN_Init();
-  MX_TIM1_Init();
+  MX_TIM3_Init();
   /* USER CODE BEGIN 2 */
 
-  // Get the relay board channel id
-  relayId = Get_RelayBoardId();
+	// Get the relay board channel id
+	relayId = Get_RelayBoardId();
 
 
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-  while (1)
-  {
+	while (1)
+	{
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-	  // If the NMEA2K link is idle, try to (re)activate it
-	  if (nmea2kNetwork.linkState == LINK_STATE_IDLE) {
-		  // Stop the seconds timer
-		  HAL_TIM_Base_Stop_IT(&htim1);
-		  // Check the retry counter against max retries
-		  if (nmea2kNetwork.linkRetries > ISO_MAX_RETRIES) {
-			  // ERROR, no valid address
-			  nmea2kNetwork.linkState = LINK_STATE_ABORT;
-			  Error_Handler();
-		  }
-		  // Try a PGN 60928 - ISO Address Claim
-		  Send_ISOAddressClaim();
-		  // Set link state to CLAIMED
-		  nmea2kNetwork.linkState = LINK_STATE_CLAIMED;
-		  // Wait for 250 ms for the claim
-		  HAL_Delay(250);
-		  // Check if the claim is still valid
-		  if (nmea2kNetwork.linkState == LINK_STATE_CLAIMED) {
-			  // Claim is valid, activate network
-			  nmea2kNetwork.linkState = LINK_STATE_ACTIVE;
-			  // Clear the retry counter
-			  nmea2kNetwork.linkRetries = 0;
-			  // (re)start the seconds timer
-			  HAL_TIM_Base_Start_IT(&htim1);
-		  }
-	  }
+		// If the NMEA2K link is idle, try to (re)activate it
+		if (nmea2kNetwork.linkState == LINK_STATE_IDLE) {
+			// Stop the seconds timer
+			HAL_TIM_Base_Stop_IT(&htim3);
+			// Check the retry counter against max retries
+			if (nmea2kNetwork.linkRetries > ISO_MAX_RETRIES) {
+				// ERROR, no valid address
+				nmea2kNetwork.linkState = LINK_STATE_ABORT;
+				Error_Handler();
+			}
+			// Try a PGN 60928 - ISO Address Claim
+			Send_ISOAddressClaim();
+			// Set link state to CLAIMED
+			nmea2kNetwork.linkState = LINK_STATE_CLAIMED;
+			// Wait for 250 ms for the claim
+			HAL_Delay(250);
+			// Check if the claim is still valid
+			if (nmea2kNetwork.linkState == LINK_STATE_CLAIMED) {
+				// Claim is valid, activate network
+				nmea2kNetwork.linkState = LINK_STATE_ACTIVE;
+				// Clear the retry counter
+				nmea2kNetwork.linkRetries = 0;
+				// (re)start the seconds timer
+			HAL_TIM_Base_Start_IT(&htim3);
+			}
+		}
 
-	  // If the link is up, do the switch polling
-	  if (nmea2kNetwork.linkState == LINK_STATE_ACTIVE) {
-		  changed = 0;
-		  // Reset the data array
-		  data[0] = relayId;
-		  for (int i = 1; i < 8; i++)
-			  data[i] = 0xFF;
-		  // Check all the switches for state changes
-		  for (int i = 0; i < RELAY_CHANNELS; i++) {
-			  offset = 6 - (2 * (i % 4));
-			  index = 1 + (i / 4);
-			  // If a switch turns on
-			  if ((result = CheckSwitch(i)) == 1) {
-				  data[index] &= ~(0b10 << offset);
-				  changed = 1;
-			  }
-			  // If a switch turns off
-			  if (result == -1) {
-				  data[index] &= ~(0b11 << offset);
-				  changed = 1;
-			  }
-		  }
-		  // If there was a change in switch status, send a PGN 127502 message
-		  if (changed != 0) {
-			  Send_SwitchBankControl(data);
-		  }
-		  // Wait 10 ms for debounce
-		  HAL_Delay(10);
-	  }
-  }
+		// If the link is up, do the switch polling
+		if (nmea2kNetwork.linkState == LINK_STATE_ACTIVE) {
+			changed = 0;
+
+			// Reset the data array
+			data[0] = relayId;
+			for (int i = 1; i < 8; i++)
+				data[i] = 0xFF;
+
+			// Check all the switches for state changes
+			for (int i = 0; i < RELAY_CHANNELS; i++) {
+				offset = 6 - (2 * (i % 4));
+				index = 1 + (i / 4);
+
+				// If a switch turns on
+				if ((result = CheckSwitch(i)) == 1) {
+					data[index] &= ~(0b10 << offset);
+					changed = 1;
+				}
+
+				// If a switch turns off
+				if (result == -1) {
+					data[index] &= ~(0b11 << offset);
+					changed = 1;
+				}
+			}
+			// If there was a change in switch status, send a PGN 127502 message
+			if (changed != 0) {
+				Send_SwitchBankControl(data);
+			}
+				// Wait 10 ms for debounce
+			HAL_Delay(10);
+		}
+	}
   /* USER CODE END 3 */
 }
 
@@ -347,7 +367,7 @@ static void MX_CAN_Init(void)
 {
 
   /* USER CODE BEGIN CAN_Init 0 */
-  CAN_FilterTypeDef  sFilterN2K127501, sFilterN2K060928;
+	CAN_FilterTypeDef  sFilterN2K127501, sFilterN2K060928;
 
   /* USER CODE END CAN_Init 0 */
 
@@ -371,90 +391,89 @@ static void MX_CAN_Init(void)
     Error_Handler();
   }
   /* USER CODE BEGIN CAN_Init 2 */
-  // Filter for Switch Bank Control messages
-  uint32_t can_id = 127502 << 8;
+	// Filter for Binary Switch Bank Status messages
+	uint32_t can_id = 127501 << 8;
 
-  sFilterN2K127501.FilterBank = 1;
-  sFilterN2K127501.FilterMode = CAN_FILTERMODE_IDMASK;
-  sFilterN2K127501.FilterScale = CAN_FILTERSCALE_32BIT;
-  sFilterN2K127501.FilterIdHigh = (can_id >> 13) & 0xFFFF;
-  sFilterN2K127501.FilterIdLow = ((can_id << 3) & 0xFFF8) | 4;
-  sFilterN2K127501.FilterMaskIdHigh = 0x0FFF;
-  sFilterN2K127501.FilterMaskIdLow = 0xF804;
-  sFilterN2K127501.FilterFIFOAssignment = CAN_FILTER_FIFO1;
-  sFilterN2K127501.FilterActivation = CAN_FILTER_ENABLE;
+	sFilterN2K127501.FilterBank = 1;
+	sFilterN2K127501.FilterMode = CAN_FILTERMODE_IDMASK;
+	sFilterN2K127501.FilterScale = CAN_FILTERSCALE_32BIT;
+	sFilterN2K127501.FilterIdHigh = (can_id >> 13) & 0xFFFF;
+	sFilterN2K127501.FilterIdLow = ((can_id << 3) & 0xFFF8) | 4;
+	sFilterN2K127501.FilterMaskIdHigh = 0x0FFF;
+	sFilterN2K127501.FilterMaskIdLow = 0xF804;
+	sFilterN2K127501.FilterFIFOAssignment = CAN_FILTER_FIFO1;
+	sFilterN2K127501.FilterActivation = CAN_FILTER_ENABLE;
 
-  HAL_CAN_ConfigFilter(&hcan, &sFilterN2K127501);
+	HAL_CAN_ConfigFilter(&hcan, &sFilterN2K127501);
 
-  // Filter for ISO messages
-  can_id = 0x0E800 << 8;
+	// Filter for ISO messages
+	can_id = 0x0E800 << 8;
 
-  sFilterN2K060928.FilterBank = 0;
-  sFilterN2K060928.FilterMode = CAN_FILTERMODE_IDMASK;
-  sFilterN2K060928.FilterScale = CAN_FILTERSCALE_32BIT;
-  sFilterN2K060928.FilterIdHigh = (can_id >> 13) & 0xFFFF;
-  sFilterN2K060928.FilterIdLow = ((can_id << 3) & 0xFFF8) | 4;
-  sFilterN2K060928.FilterMaskIdHigh = 0x0FC0;
-  sFilterN2K060928.FilterMaskIdLow = 0x0004;
-  sFilterN2K060928.FilterFIFOAssignment = CAN_FILTER_FIFO1;
-  sFilterN2K060928.FilterActivation = CAN_FILTER_ENABLE;
+	sFilterN2K060928.FilterBank = 0;
+	sFilterN2K060928.FilterMode = CAN_FILTERMODE_IDMASK;
+	sFilterN2K060928.FilterScale = CAN_FILTERSCALE_32BIT;
+	sFilterN2K060928.FilterIdHigh = (can_id >> 13) & 0xFFFF;
+	sFilterN2K060928.FilterIdLow = ((can_id << 3) & 0xFFF8) | 4;
+	sFilterN2K060928.FilterMaskIdHigh = 0x0FC0;
+	sFilterN2K060928.FilterMaskIdLow = 0x0004;
+	sFilterN2K060928.FilterFIFOAssignment = CAN_FILTER_FIFO1;
+	sFilterN2K060928.FilterActivation = CAN_FILTER_ENABLE;
 
-  HAL_CAN_ConfigFilter(&hcan, &sFilterN2K060928);
+	HAL_CAN_ConfigFilter(&hcan, &sFilterN2K060928);
 
-  // Start CAN bus
-  HAL_CAN_Start(&hcan);
-  // Enable RX interrupts
-  if (HAL_CAN_ActivateNotification(&hcan, CAN_IT_RX_FIFO1_MSG_PENDING) != HAL_OK) {
-	  Error_Handler();
-  }
+	// Start CAN bus
+	HAL_CAN_Start(&hcan);
+	// Enable RX interrupts
+	if (HAL_CAN_ActivateNotification(&hcan, CAN_IT_RX_FIFO1_MSG_PENDING) != HAL_OK) {
+		Error_Handler();
+	}
 
   /* USER CODE END CAN_Init 2 */
 
 }
 
 /**
-  * @brief TIM1 Initialization Function
+  * @brief TIM3 Initialization Function
   * @param None
   * @retval None
   */
-static void MX_TIM1_Init(void)
+static void MX_TIM3_Init(void)
 {
 
-  /* USER CODE BEGIN TIM1_Init 0 */
+  /* USER CODE BEGIN TIM3_Init 0 */
 
-  /* USER CODE END TIM1_Init 0 */
+  /* USER CODE END TIM3_Init 0 */
 
   TIM_ClockConfigTypeDef sClockSourceConfig = {0};
   TIM_MasterConfigTypeDef sMasterConfig = {0};
 
-  /* USER CODE BEGIN TIM1_Init 1 */
+  /* USER CODE BEGIN TIM3_Init 1 */
 
-  /* USER CODE END TIM1_Init 1 */
-  htim1.Instance = TIM1;
-  htim1.Init.Prescaler = 6399;
-  htim1.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim1.Init.Period = 999;
-  htim1.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
-  htim1.Init.RepetitionCounter = 0;
-  htim1.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
-  if (HAL_TIM_Base_Init(&htim1) != HAL_OK)
+  /* USER CODE END TIM3_Init 1 */
+  htim3.Instance = TIM3;
+  htim3.Init.Prescaler = 6399;
+  htim3.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim3.Init.Period = 99;
+  htim3.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim3.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim3) != HAL_OK)
   {
     Error_Handler();
   }
   sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
-  if (HAL_TIM_ConfigClockSource(&htim1, &sClockSourceConfig) != HAL_OK)
+  if (HAL_TIM_ConfigClockSource(&htim3, &sClockSourceConfig) != HAL_OK)
   {
     Error_Handler();
   }
   sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
   sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
-  if (HAL_TIMEx_MasterConfigSynchronization(&htim1, &sMasterConfig) != HAL_OK)
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim3, &sMasterConfig) != HAL_OK)
   {
     Error_Handler();
   }
-  /* USER CODE BEGIN TIM1_Init 2 */
+  /* USER CODE BEGIN TIM3_Init 2 */
 
-  /* USER CODE END TIM1_Init 2 */
+  /* USER CODE END TIM3_Init 2 */
 
 }
 
@@ -480,11 +499,11 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_WritePin(GPIOA, LED0_Pin|LED1_Pin|LED2_Pin|LED3_Pin
                           |LED4_Pin|LED5_Pin|LED6_Pin|LED7_Pin, GPIO_PIN_RESET);
 
-  /*Configure GPIO pin : SW8_ON_Pin */
-  GPIO_InitStruct.Pin = SW8_ON_Pin;
+  /*Configure GPIO pin : SW8_OFF_Pin */
+  GPIO_InitStruct.Pin = SW8_OFF_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_PULLUP;
-  HAL_GPIO_Init(SW8_ON_GPIO_Port, &GPIO_InitStruct);
+  HAL_GPIO_Init(SW8_OFF_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pins : LED0_Pin LED1_Pin LED2_Pin LED3_Pin
                            LED4_Pin LED5_Pin LED6_Pin LED7_Pin */
@@ -495,12 +514,12 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : SW1_OFF_Pin SW1_ON_Pin SW4_ON_Pin SW5_OFF_Pin
-                           SW2_OFF_Pin SW2_ON_Pin SW3_OFF_Pin SW3_ON_Pin
-                           SW4_OFF_Pin */
-  GPIO_InitStruct.Pin = SW1_OFF_Pin|SW1_ON_Pin|SW4_ON_Pin|SW5_OFF_Pin
-                          |SW2_OFF_Pin|SW2_ON_Pin|SW3_OFF_Pin|SW3_ON_Pin
-                          |SW4_OFF_Pin;
+  /*Configure GPIO pins : SW1_ON_Pin SW1_OFF_Pin SW4_OFF_Pin SW5_ON_Pin
+                           SW2_ON_Pin SW2_OFF_Pin SW3_ON_Pin SW3_OFF_Pin
+                           SW4_ON_Pin */
+  GPIO_InitStruct.Pin = SW1_ON_Pin|SW1_OFF_Pin|SW4_OFF_Pin|SW5_ON_Pin
+                          |SW2_ON_Pin|SW2_OFF_Pin|SW3_ON_Pin|SW3_OFF_Pin
+                          |SW4_ON_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_PULLUP;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
@@ -511,10 +530,10 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_PULLDOWN;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : SW5_ON_Pin SW6_OFF_Pin SW6_ON_Pin SW7_OFF_Pin
-                           SW7_ON_Pin SW8_OFF_Pin */
-  GPIO_InitStruct.Pin = SW5_ON_Pin|SW6_OFF_Pin|SW6_ON_Pin|SW7_OFF_Pin
-                          |SW7_ON_Pin|SW8_OFF_Pin;
+  /*Configure GPIO pins : SW5_OFF_Pin SW6_ON_Pin SW6_OFF_Pin SW7_ON_Pin
+                           SW7_OFF_Pin SW8_ON_Pin */
+  GPIO_InitStruct.Pin = SW5_OFF_Pin|SW6_ON_Pin|SW6_OFF_Pin|SW7_ON_Pin
+                          |SW7_OFF_Pin|SW8_ON_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_PULLUP;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
@@ -535,7 +554,7 @@ static void MX_GPIO_Init(void)
  *****************************************************************************/
 void HAL_TIM_PeriodElapsedCallback (TIM_HandleTypeDef *htim)
 {
-	struct TIMER_T *timer, *temp;
+	static struct TIMER_T *timer = NULL, *temp;
 
 	__HAL_TIM_CLEAR_IT(htim, TIM_IT_UPDATE);
 	if (timers != NULL) {
@@ -623,6 +642,11 @@ void HAL_CAN_RxFifo1MsgPendingCallback(CAN_HandleTypeDef *hcan)
 			Send_ISOAddressClaim();
 		}
 	}
+
+	// Check for ISO Transport Protocol messages
+	if (((N2KPgn & 0x1FF00) == 0x0EC00) || ((N2KPgn & 0x1FF00) == 0x0EB00)) {
+		Handle_ISOTransportMessages(N2KPgn, senderId, RxData);
+	}
 }
 
 /******************************************************************************
@@ -654,7 +678,8 @@ void Send_ISOAddressClaim() {
 			nmea2kNetwork.deviceInstance,
 			nmea2kNetwork.deviceFunction,
 			nmea2kNetwork.deviceClass & 0x7F,
-			((nmea2kNetwork.systemInstance << 4) & 0xF0) | ((nmea2kNetwork.industryGroup << 1) & 0x0E) | 0x01
+			((nmea2kNetwork.systemInstance << 4) & 0xF0) | ((nmea2kNetwork.industryGroup << 1) & 0x0E) |
+					((nmea2kNetwork.arbetraryAddress)?1:0)
 	};
 
 	// Send the NMEA 60928 ISO Address Claim message
@@ -662,6 +687,114 @@ void Send_ISOAddressClaim() {
 		Error_Handler();
 	}
 
+}
+
+void Send_ISOAcknowledgement(uint8_t dest, uint8_t control, uint8_t group, uint32_t pgn) {
+	CAN_TxHeaderTypeDef	TxHeader;
+	uint32_t			TxMailbox = CAN_TX_MAILBOX0;
+	uint32_t			N2KId;
+
+	// Initialise the CAN header with the NMEA2K info
+	// Can ID = PRIO(3) - 0 - PGN(17) - Sender ID(8)
+	N2KId = (6 << 26) | (0x0E800 << 8) | (dest << 8) | nmea2kNetwork.senderId;
+	TxHeader.ExtId = N2KId;
+	TxHeader.IDE = CAN_ID_EXT;
+	TxHeader.RTR = CAN_RTR_DATA;
+	TxHeader.DLC = 8;
+	TxHeader.TransmitGlobalTime = DISABLE;
+
+	// Initialise the data array with the ISO NAME info
+	uint8_t TxData[] = {control, group, 0xFF, 0xFF, 0xFF, (pgn & 0xFF), ((pgn >> 8) & 0xFF), ((pgn >> 16) & 0xFF)};
+
+	// Send the NMEA 60928 ISO Address Claim message
+	if (HAL_CAN_AddTxMessage(&hcan, &TxHeader, TxData, &TxMailbox) != HAL_OK) {
+		Error_Handler();
+	}
+
+}
+
+void Handle_ISOTransportMessages(uint32_t N2KPgn, uint8_t senderId, uint8_t *data) {
+	struct ISO_TRANSPORT_MESSAGE *msgList = NULL, *currentMsg, *newMsg;
+	int offset, byteCount;
+
+	// BAM announcement
+	if (((N2KPgn & 0x1FF00) == 0x0EC00) && (data[0] == 0x20)) {
+		// Find the last message to insert after
+		if ((currentMsg = msgList) != NULL) {
+			while (currentMsg->next != NULL)
+				currentMsg = currentMsg->next;
+		}
+
+		// Create the new message structure
+		if ((newMsg = malloc(sizeof(struct ISO_TRANSPORT_MESSAGE))) == NULL) {
+			Error_Handler();
+		}
+
+		// Fill the structure
+		newMsg->senderId = senderId;
+		newMsg->isoCommand = data[0];
+		newMsg->packetsExpected = data[3];
+		newMsg->packetsReceived = 0;
+		newMsg->messageSize = (uint16_t)data[1];
+		newMsg->pgn = (((uint32_t)data[4]) >> 8);
+		newMsg->prev = currentMsg;
+		newMsg->next = NULL;
+
+		// Create the data structure
+		if ((newMsg->data = malloc(newMsg->messageSize * sizeof(uint8_t))) == NULL) {
+			Error_Handler();
+		}
+
+		// Link newMsg in the list
+		if (currentMsg == NULL) {
+			msgList = newMsg;
+		}
+		else {
+			currentMsg->prev = newMsg;
+		}
+	}
+
+	// Data package
+	if ((N2KPgn & 0x1FF00) == 0x0EB00) {
+		currentMsg = msgList;
+		// Find the right message
+		while(currentMsg != NULL) {
+			if (currentMsg->senderId == senderId) {
+				offset = data[0] - 1;
+				if ((byteCount = currentMsg->messageSize - (data[0] * 7)) > 7)
+					byteCount = 7;
+				memcpy(currentMsg->data + offset, data, byteCount);
+				currentMsg->packetsReceived += 1;
+
+				// Check if message is complete
+				if (currentMsg->packetsReceived == currentMsg->packetsExpected) {
+					// Check for ISO Commanded Address
+					if (currentMsg->pgn == 65240)
+						Handle_ISOCommandedAddress(currentMsg->data);
+
+					// Cleanup memory and restore linked list
+					if (currentMsg->prev == NULL)
+						msgList = currentMsg->next;
+					else
+						currentMsg->prev->next = currentMsg->next;
+
+					if (currentMsg->next != NULL)
+						currentMsg->next->prev = currentMsg->prev;
+
+					free(currentMsg->data);
+					free(currentMsg);
+				}
+				break;
+			}
+		}
+	}
+}
+
+void Handle_ISOCommandedAddress(uint8_t *data) {
+	if (Compare_NameWeight(data) == 0) {
+		nmea2kNetwork.senderId = data[8];
+		nmea2kNetwork.arbetraryAddress = 0;
+	}
 }
 
 /******************************************************************************
@@ -737,12 +870,12 @@ void Set_Leds(uint8_t *data) {
 
 		if ((data[index] >> offset) & 0x01) {
 			// Parameter is 1, light the LED
-			ledStatus &= ~(1 << i);
+			ledStatus |= (1 << i);
 			HAL_GPIO_WritePin(leds[i].gpio, leds[i].pin, GPIO_PIN_SET);
 		}
 		else {
 			// Parameter is 0, dim the LED
-			ledStatus |= (1 << i);
+			ledStatus &= ~(1 << i);
 			HAL_GPIO_WritePin(leds[i].gpio, leds[i].pin, GPIO_PIN_RESET);
 		}
 	}
@@ -838,7 +971,7 @@ int CheckSwitch(int switchNo) {
 				pSwitch->switchState = SWITCH_ON_2;
 				break;
 			case SWITCH_ON_2:
-				pSwitch->switchState = SWITCH_ON;
+ 				pSwitch->switchState = SWITCH_ON;
 				return 1;
 			}
 		}
@@ -894,7 +1027,7 @@ int CheckSwitch(int switchNo) {
 				pSwitch->switchState = SWITCH_ON_2;
 				break;
 			case SWITCH_ON_2:
-				pSwitch->switchState = SWITCH_ON;
+                                                				pSwitch->switchState = SWITCH_ON;
 				return 1;
 			}
 		}
@@ -950,6 +1083,7 @@ int Create_Timer(struct TIMER_T *timers,int switchId, int timeOut, void (*callba
 
 		newTimer->prev = lastTimer;
 		lastTimer->next = newTimer;
+
 	}
 
 	return 0;
