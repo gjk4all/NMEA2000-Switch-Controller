@@ -58,8 +58,8 @@ void Error_Handler(void);
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/
-#define SW8_OFF_Pin GPIO_PIN_13
-#define SW8_OFF_GPIO_Port GPIOC
+#define LED_Pin GPIO_PIN_13
+#define LED_GPIO_Port GPIOC
 #define LED0_Pin GPIO_PIN_0
 #define LED0_GPIO_Port GPIOA
 #define LED1_Pin GPIO_PIN_1
@@ -84,14 +84,8 @@ void Error_Handler(void);
 #define SW4_OFF_GPIO_Port GPIOB
 #define SW5_ON_Pin GPIO_PIN_11
 #define SW5_ON_GPIO_Port GPIOB
-#define ID0_Pin GPIO_PIN_12
-#define ID0_GPIO_Port GPIOB
-#define ID1_Pin GPIO_PIN_13
-#define ID1_GPIO_Port GPIOB
-#define ID2_Pin GPIO_PIN_14
-#define ID2_GPIO_Port GPIOB
-#define ID3_Pin GPIO_PIN_15
-#define ID3_GPIO_Port GPIOB
+#define SW8_OFF_Pin GPIO_PIN_12
+#define SW8_OFF_GPIO_Port GPIOB
 #define SW5_OFF_Pin GPIO_PIN_8
 #define SW5_OFF_GPIO_Port GPIOA
 #define SW6_ON_Pin GPIO_PIN_9
