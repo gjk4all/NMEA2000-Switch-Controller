@@ -12,7 +12,7 @@ The device can service 8 switches and send their PGN 127502 commands. The device
 Every switch can be configured to control a specific PGN 127502 relay output.
 
 ## Schematic
-V1.0 [schematic](NMEA2000%20Switch%20Controller%20V1.0.pdf) added to the repository
+V1.0 [schematic](NMEA2000%20Switch%20Controller.pdf) added to the repository
 
 ## Compliance
 - Reacts on PGN 59904 - ISO Request messages (for all supported PGN's)
@@ -32,7 +32,7 @@ V1.0 [schematic](NMEA2000%20Switch%20Controller%20V1.0.pdf) added to the reposit
 - PGN 126998 Configuration Information (TX)
 
 ## Electronics
-See [schematic](NMEA2000%20Switch%20Controller%20V1.0.pdf)
+See [schematic](NMEA2000%20Switch%20Controller.pdf)
 - Operating voltage: 12V (9-16V through NMEA2000 bus)
 - LED's operating voltage: 12V (NMEA2000 bus voltage)
 
